@@ -1,0 +1,277 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;1,400;1,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --font-display: "Inter", -apple-system, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+
+  --color-bg-base: #F8F7F4;       /* Soft warm off-white luxury canvas */
+  --color-bg-surface: #FFFFFF;    /* Pure web-white elements */
+  --color-bg-elevated: #FFFFFF;
+  --color-bg-subtle: #F1EFEA;     /* Soft warm grey/cream accent background */
+
+  --color-border-dim: rgba(26, 26, 26, 0.06);   /* Ultra fine subtle borders */
+  --color-border-base: rgba(26, 26, 26, 0.12);   /* Soft structured border */
+  --color-border-focus: #1A1A1A;                 /* Sharp high contrast border */
+
+  --color-text-primary: #1A1A1A;   /* Pure high contrast dark charcoal */
+  --color-text-secondary: #555555; /* Refined readability charcoal grey */
+  --color-text-tertiary: rgba(26, 26, 26, 0.45); /* Elegant light grey labels */
+
+  --color-status-safe: #16A34A;     /* Lush garden green */
+  --color-status-warning: #CA8A04;  /* Muted sophisticated gold/yellow */
+  --color-status-danger: #DC2626;   /* Rich deep red */
+  --color-status-info: #1D4ED8;     /* Clean royal blue */
+
+  --color-accent: #1A1A1A;         /* Charcoal/pure dark carbon accent tone */
+}
+
+/* Custom resets & aesthetics */
+body {
+  background-color: #F8F7F4;
+  color: #1A1A1A;
+  font-family: "Inter", -apple-system, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F8F7F4;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(26, 26, 26, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(26, 26, 26, 0.3);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.9); }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Shimmer keyframes for medical and waitlist analysis indicators */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #F1EFEA 25%, #FFFFFF 50%, #F1EFEA 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* ==========================================================================
+   ELEGANT LIGHT THEME MAPPER FOR ADMIN DASHBOARD
+   ========================================================================== */
+.admin-dashboard-container {
+  background-color: var(--color-bg-base) !important;
+  color: var(--color-text-primary) !important;
+}
+
+/* Texts and Titles */
+.admin-dashboard-container h1, 
+.admin-dashboard-container h2, 
+.admin-dashboard-container h3, 
+.admin-dashboard-container h4, 
+.admin-dashboard-container h5,
+.admin-dashboard-container .text-white,
+.admin-dashboard-container .text-\[\#F0F0F5\] {
+  color: var(--color-text-primary) !important;
+}
+
+.admin-dashboard-container .text-\[\#8A8A9B\] {
+  color: var(--color-text-secondary) !important;
+}
+
+.admin-dashboard-container .text-\[\#52525F\] {
+  color: var(--color-text-tertiary) !important;
+}
+
+/* Color Gold/Bronze button highlights mapped to elegant dark Charcoal */
+.admin-dashboard-container .text-\[\#E8D5B0\] {
+  color: var(--color-text-primary) !important;
+  font-weight: 600 !important;
+}
+
+.admin-dashboard-container .bg-\[\#E8D5B0\] {
+  background-color: var(--color-text-primary) !important;
+  color: var(--color-bg-surface) !important;
+}
+
+.admin-dashboard-container .bg-\[\#E8D5B0\]\/15 {
+  background-color: var(--color-bg-subtle) !important;
+  border-color: var(--color-border-base) !important;
+}
+
+/* Custom Background panels mapped to Pure White cards */
+.admin-dashboard-container .bg-\[\#0F0F15\] {
+  background-color: var(--color-bg-surface) !important;
+  border-color: var(--color-border-base) !important;
+  color: var(--color-text-primary) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+.admin-dashboard-container .bg-\[\#0F0F15\]\/40 {
+  background-color: rgba(255, 255, 255, 0.45) !important;
+  border-color: var(--color-border-dim) !important;
+  box-shadow: var(--shadow-xs) !important;
+}
+
+.admin-dashboard-container .bg-\[\#17171F\] {
+  background-color: var(--color-bg-subtle) !important;
+  border-color: var(--color-border-dim) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.admin-dashboard-container .bg-\[\#13131A\] {
+  background-color: var(--color-bg-subtle) !important;
+  border-color: var(--color-border-dim) !important;
+}
+
+.admin-dashboard-container .bg-\[\#14141E\]\/40 {
+  background-color: var(--color-bg-subtle) !important;
+}
+
+.admin-dashboard-container .bg-\[\#111116\] {
+  background-color: var(--color-bg-subtle) !important;
+  border-color: var(--color-border-dim) !important;
+}
+
+.admin-dashboard-container .bg-\[\#08080C\] {
+  background-color: var(--color-bg-base) !important;
+}
+
+.admin-dashboard-container .bg-\[\#08080C\]\/40 {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+.admin-dashboard-container .bg-\[\#08080C\]\/80 {
+  background-color: var(--color-bg-subtle) !important;
+}
+
+/* Borders mapping */
+.admin-dashboard-container .border-\[\#1F1F2B\] {
+  border-color: var(--color-border-base) !important;
+}
+
+.admin-dashboard-container .border-\[\#1F1F2B\]\/40 {
+  border-color: var(--color-border-dim) !important;
+}
+
+.admin-dashboard-container .border-\[\#1F1F2B\]\/50 {
+  border-color: var(--color-border-dim) !important;
+}
+
+.admin-dashboard-container .border-\[\#1F1F2C\] {
+  border-color: var(--color-border-base) !important;
+}
+
+.admin-dashboard-container .border-\[\#2C2C3C\] {
+  border-color: var(--color-border-base) !important;
+}
+
+/* Grid layout lines */
+.admin-dashboard-container .border-r {
+  border-color: var(--color-border-dim) !important;
+}
+
+.admin-dashboard-container .divide-y {
+  border-color: var(--color-border-dim) !important;
+}
+
+.admin-dashboard-container .divide-\[\#1F1F2B\]\/60 > * {
+  border-color: var(--color-border-dim) !important;
+}
+
+/* Interactive elements */
+.admin-dashboard-container button {
+  transition: all 0.2s ease;
+}
+
+.admin-dashboard-container button:hover {
+  opacity: 0.95;
+}
+
+.admin-dashboard-container .hover\:bg-\[\#1E1E28\]\/50:hover {
+  background-color: var(--color-bg-subtle) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.admin-dashboard-container .hover\:bg-\[\#1E1E28\]\/35:hover,
+.admin-dashboard-container .hover\:bg-\[\#1E1E28\]\/25:hover,
+.admin-dashboard-container .hover\:bg-\[\#1C1C24\]\/50:hover {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+.admin-dashboard-container .bg-\[\#1C1C24\]\/90 {
+  background-color: var(--color-bg-subtle) !important;
+}
+
+/* Sliding active Detail Panels and Drawers */
+.admin-dashboard-container .fixed.bg-\[\#0F0F15\] {
+  background-color: var(--color-bg-surface) !important;
+  border-left-color: var(--color-border-base) !important;
+}
+
+.admin-dashboard-container .fixed.bg-\[\#0F0F15\] .bg-\[\#14141E\] {
+  background-color: var(--color-bg-subtle) !important;
+  border-bottom-color: var(--color-border-base) !important;
+}
+
+.admin-dashboard-container pre {
+  background-color: var(--color-bg-subtle) !important;
+  border-color: var(--color-border-base) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+/* Keep action buttons text white */
+.admin-dashboard-container button .text-white,
+.admin-dashboard-container button.bg-accent,
+.admin-dashboard-container .bg-neutral-950 {
+  color: var(--color-text-primary) !important;
+}
+
+.admin-dashboard-container .bg-neutral-950 {
+  background-color: var(--color-bg-surface) !important;
+  border-color: var(--color-border-base) !important;
+}
+
+/* Charts Overrides */
+.admin-dashboard-container .recharts-cartesian-grid-horizontal line,
+.admin-dashboard-container .recharts-cartesian-grid-vertical line {
+  stroke: var(--color-border-base) !important;
+  stroke-opacity: 0.45;
+}
+
+.admin-dashboard-container .recharts-tooltip-cursor {
+  fill: rgba(0, 0, 0, 0.01) !important;
+}
+
+.admin-dashboard-container .recharts-tooltip-wrapper .bg-\[\#17171F\] {
+  background-color: var(--color-bg-surface) !important;
+  border: 1px solid var(--color-border-base) !important;
+  color: var(--color-text-primary) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.admin-dashboard-container .recharts-tooltip-wrapper .bg-\[\#17171F\] * {
+  color: var(--color-text-secondary) !important;
+}
+
+.admin-dashboard-container .recharts-tooltip-wrapper .bg-\[\#17171F\] .font-bold {
+  color: var(--color-text-primary) !important;
+}
+

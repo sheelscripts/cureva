@@ -1,0 +1,7 @@
+{
+  "extends": "@cureva/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"]
+}
