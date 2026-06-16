@@ -566,3 +566,17 @@ BEGIN
   LIMIT match_count;
 END;
 $$;
+
+-- ══════════════════════════════════════════════════════════════════
+-- GRANTS
+-- Supabase requires explicit grants for service_role, anon, and
+-- authenticated to interact with the public schema. Without these,
+-- service_role gets 42501 on every SELECT.
+-- ══════════════════════════════════════════════════════════════════
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;

@@ -23,6 +23,10 @@ import { config as loadEnv } from 'dotenv';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+import {
+  chatCompletionWithFallback,
+  OpenRouterError,
+} from '../app/ai/openrouter';
 
 // ─── env loading ───────────────────────────────────────────────────
 
@@ -114,25 +118,44 @@ async function section<T>(title: string, fn: () => Promise<T>): Promise<T> {
 // ─── checks ────────────────────────────────────────────────────────
 
 async function checkEnvPresent(): Promise<boolean> {
-  const required = [
+  // Critical: needed for the app to start.
+  const critical = [
     'NEXT_PUBLIC_SUPABASE_URL',
     'NEXT_PUBLIC_SUPABASE_ANON_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
-    'GEMINI_API_KEY',
+    'OPENROUTER_API_KEY',
   ];
-  const missing = required.filter((k) => !process.env[k] || process.env[k]!.startsWith('your_'));
+  // Optional: RAG vector search degrades if missing.
+  const optional = ['GEMINI_API_KEY', 'ELEVENLABS_API_KEY', 'RESEND_API_KEY'];
 
-  if (missing.length === 0) {
-    record('Required env vars', 'pass', required.join(', '));
-    return true;
+  const missingCritical = critical.filter(
+    (k) => !process.env[k] || process.env[k]!.startsWith('your_')
+  );
+  const missingOptional = optional.filter((k) => !process.env[k]);
+
+  if (missingCritical.length === 0) {
+    record('Critical env vars', 'pass', critical.join(', '));
+  } else {
+    record(
+      'Critical env vars',
+      'fail',
+      `Missing: ${missingCritical.join(', ')}. Update apps/web/.env.local.`
+    );
   }
 
-  record(
-    'Required env vars',
-    'fail',
-    `Missing or placeholder: ${missing.join(', ')}. Update apps/web/.env.local.`
-  );
-  return false;
+  for (const k of missingOptional) {
+    record(
+      `Optional: ${k}`,
+      'warn',
+      `Not set. ${k === 'GEMINI_API_KEY'
+        ? 'RAG vector search disabled; keyword search still works.'
+        : k === 'ELEVENLABS_API_KEY'
+        ? 'Scribe STT and voice-call TTS will fall back gracefully.'
+        : 'Email notifications disabled; WhatsApp/SMS deep links still work.'}`
+    );
+  }
+
+  return missingCritical.length === 0;
 }
 
 async function checkSupabaseConnectivity(): Promise<boolean> {
@@ -181,7 +204,10 @@ async function checkTablesAndSchema(): Promise<boolean> {
 
   const missing: string[] = [];
   for (const table of expectedTables) {
-    const { error } = await client.from(table).select('id', { head: true, count: 'exact' });
+    // NOTE: don't use `{ head: true }` — PostgREST returns 204 for missing
+    // tables in that mode, which is a false positive. A real SELECT
+    // returns 404 + `PGRST205` for missing tables.
+    const { error } = await client.from(table).select('id', { count: 'exact' }).limit(1);
     if (error) missing.push(`${table} (${error.code ?? error.message})`);
   }
 
@@ -263,46 +289,104 @@ async function checkTablesAndSchema(): Promise<boolean> {
   return true;
 }
 
-async function checkGemini(): Promise<boolean> {
-  const key = process.env.GEMINI_API_KEY;
+async function checkOpenRouter(): Promise<boolean> {
+  const key = process.env.OPENROUTER_API_KEY;
   if (!key) {
-    record('Gemini API', 'fail', 'GEMINI_API_KEY missing');
+    record('OpenRouter API', 'fail', 'OPENROUTER_API_KEY missing in apps/web/.env.local');
     return false;
   }
 
   const start = Date.now();
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: 'Reply with the single word: ok' }] }],
-          generationConfig: { maxOutputTokens: 4 },
-        }),
-      }
-    );
+    const result = await chatCompletionWithFallback({
+      messages: [
+        { role: 'system', content: 'You are concise.' },
+        { role: 'user', content: 'Reply with the single word: ok' },
+      ],
+      maxTokens: 8,
+      temperature: 0,
+    });
     const ms = Date.now() - start;
 
-    if (!res.ok) {
-      const body = await res.text();
-      record('Gemini API', 'fail', `${res.status} ${res.statusText}: ${body.slice(0, 200)}`, ms);
-      return false;
+    if (!/ok/i.test(result.text)) {
+      record(
+        'OpenRouter API',
+        'warn',
+        `Unexpected reply from ${result.model}: "${result.text.trim().slice(0, 80)}"`,
+        ms
+      );
+      return true;
     }
 
-    const json: any = await res.json();
-    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    if (!/ok/i.test(text)) {
-      record('Gemini API', 'warn', `Unexpected reply: "${text.slice(0, 60)}"`, ms);
-      return true; // not fatal — just a behaviour change
-    }
-    record('Gemini API', 'pass', `gemini-2.5-flash replied: "${text.trim()}"`, ms);
+    record(
+      'OpenRouter API',
+      'pass',
+      `${result.model} replied: "${result.text.trim()}"${result.fromFallback ? ' (via fallback)' : ''}`,
+      ms
+    );
     return true;
   } catch (err: any) {
-    record('Gemini API', 'fail', err?.message ?? String(err));
+    if (err instanceof OpenRouterError) {
+      record('OpenRouter API', 'fail', `${err.message}`, undefined);
+    } else {
+      record('OpenRouter API', 'fail', err?.message ?? String(err));
+    }
     return false;
   }
+}
+
+async function checkElevenLabs(): Promise<boolean> {
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) {
+    record(
+      'ElevenLabs API',
+      'warn',
+      'ELEVENLABS_API_KEY not set. Scribe STT and voice-call TTS will fall back to browser-native TTS / empty transcripts. Add a free key at https://elevenlabs.io/app/settings/api-keys'
+    );
+    return false;
+  }
+
+  const start = Date.now();
+  try {
+    // User-info endpoint is the cheapest way to validate the key.
+    const res = await fetch('https://api.elevenlabs.io/v1/user', {
+      headers: { 'xi-api-key': key },
+    });
+    const ms = Date.now() - start;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      record('ElevenLabs API', 'fail', `${res.status}: ${body.slice(0, 200)}`, ms);
+      return false;
+    }
+    const data: any = await res.json();
+    record(
+      'ElevenLabs API',
+      'pass',
+      `Authenticated as ${data?.subscription?.tier ?? 'free'} tier (${data?.subscription?.character_count ?? '?'} chars used)`,
+      ms
+    );
+    return true;
+  } catch (err: any) {
+    record('ElevenLabs API', 'fail', err?.message ?? String(err));
+    return false;
+  }
+}
+
+async function checkGeminiEmbeddings(): Promise<boolean> {
+  // Embeddings are the only thing still on Gemini. The RAG retriever
+  // wraps this in try/catch, so failure here is a soft warning rather
+  // than a critical failure.
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    record(
+      'Gemini embeddings (RAG)',
+      'warn',
+      'GEMINI_API_KEY not set. RAG vector search will be disabled; keyword search still works.'
+    );
+    return false;
+  }
+  record('Gemini embeddings (RAG)', 'pass', 'Key present (RAG retriever will attempt vector search on demand).');
+  return true;
 }
 
 async function checkRagRpc(): Promise<boolean> {
@@ -315,8 +399,9 @@ async function checkRagRpc(): Promise<boolean> {
   const start = Date.now();
   const { data, error } = await client.rpc('match_documents' as any, {
     query_embedding: new Array(768).fill(0), // dummy zero vector — should return 0 rows, not error
+    match_threshold: 0.0,
     match_count: 1,
-    filter: {},
+    category_filter: null,
   } as any);
   const ms = Date.now() - start;
 
@@ -395,7 +480,9 @@ async function main() {
   });
 
   await section('AI providers', async () => {
-    await checkGemini();
+    await checkOpenRouter();
+    await checkElevenLabs();
+    await checkGeminiEmbeddings();
   });
 
   await section('RAG', async () => {
