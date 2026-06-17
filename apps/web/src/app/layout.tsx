@@ -4,7 +4,7 @@ import NotificationToast from "@/components/slotsaver/NotificationToast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cureva - Autonomous Medical Triage & Operations",
+  title: "Cureva | AI",
   description: "Autonomous Clinical Operations & Agentic Patient Triage Platform",
 };
 
