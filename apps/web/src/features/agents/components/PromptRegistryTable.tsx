@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   FileCode, 
@@ -16,7 +16,8 @@ import {
   TrendingUp,
   RefreshCw
 } from "lucide-react";
-import { promptMetrics } from "@/mock/admin";
+import { getPromptMetrics } from "@cureva/sdk";
+import { promptMetrics as initialPromptMetrics } from "@/mock/admin";
 
 export default function PromptRegistryTable() {
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
@@ -26,8 +27,14 @@ export default function PromptRegistryTable() {
   const [showProgress, setShowProgress] = useState<boolean>(false);
   const [evalStatusText, setEvalStatusText] = useState<string | null>(null);
   const [rollbackStatus, setRollbackStatus] = useState<string | null>(null);
+  const [promptMetricsData, setPromptMetrics] = useState<typeof initialPromptMetrics>(initialPromptMetrics);
 
-  const activePrompt = promptMetrics.find(p => p.promptId === selectedPromptId) || null;
+  // Fetch prompt metrics asynchronously
+  useEffect(() => {
+    getPromptMetrics().then(setPromptMetrics).catch(() => setPromptMetrics(initialPromptMetrics));
+  }, []);
+
+  const activePrompt = promptMetricsData.find(p => p.promptId === selectedPromptId) || null;
 
   const getScoreColor = (score: number) => {
     if (score >= 0.85) return "text-status-safe";
@@ -112,7 +119,7 @@ system_instructions: |
             </tr>
           </thead>
           <tbody className="divide-y divide-border-dim font-mono text-text-primary">
-            {promptMetrics.map((prompt) => (
+            {promptMetricsData.map((prompt) => (
               <tr
                 key={prompt.promptId}
                 onClick={() => setSelectedPromptId(prompt.promptId)}

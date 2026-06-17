@@ -66,6 +66,42 @@ export function SlotSaverProvider({ children }: { children: React.ReactNode }) {
     escalationsRef.current = escalations;
   }, [escalations]);
 
+  // Load telemetry metrics from database API on mount
+  useEffect(() => {
+    async function loadMetrics() {
+      try {
+        const res = await fetch("/api/slotsaver");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.tomorrowRiskScores && data.tomorrowRiskScores.length > 0) {
+            setRiskScores(data.tomorrowRiskScores);
+          }
+          if (data.activeSessions && data.activeSessions.length > 0) {
+            setActiveSessions(data.activeSessions);
+          }
+          if (data.completedSessions && data.completedSessions.length > 0) {
+            setCompletedSessions(data.completedSessions);
+          }
+          if (data.openEscalations && data.openEscalations.length > 0) {
+            setEscalations(data.openEscalations);
+          }
+          if (data.interventionLog && data.interventionLog.length > 0) {
+            setInterventionLog(data.interventionLog);
+          }
+          // Compute dynamic total revenue saved
+          const totalRev = data.completedSessions
+            .filter((s: any) => s.outcome === "recovered")
+            .reduce((acc: number, curr: any) => acc + curr.valueInr, 420000);
+          setRevenue(totalRev);
+        }
+      } catch (e) {
+        console.warn("Failed to fetch Slotsaver DB metrics:", e);
+      }
+    }
+    loadMetrics();
+  }, []);
+
+
   const simulationTickRef = useRef(0);
   const demoTriggeredRef = useRef(false);
 

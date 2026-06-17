@@ -19,7 +19,14 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@backend/*": ["../../backend/*"],
+      "@agents/*": ["../../agents/*"],
+      "@mcp/*": ["../../mcp/*"],
+      "@rag/*": ["../../rag/*"],
+      "@prompts/*": ["../../prompts/*"],
+      "@ml/*": ["../../ml/*"],
+      "@eval/*": ["../../eval/*"]
     }
   },
   "include": [
@@ -28,7 +35,14 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    "../../backend/**/*.ts",
+    "../../agents/**/*.ts",
+    "../../mcp/**/*.ts",
+    "../../rag/**/*.ts",
+    "../../prompts/**/*.ts",
+    "../../ml/**/*.ts",
+    "../../eval/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

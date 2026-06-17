@@ -21,6 +21,8 @@
 import {
   chatCompletion,
   chatCompletionWithFallback,
+  chatCompletionMultiFallback,
+  chatCompletionOpenRouter,
   chatCompletionJson,
   chatCompletionText,
   tryParseJson,
@@ -30,7 +32,15 @@ import { embedWithOpenRouter } from './embeddings';
 
 // ─── re-exports (LLM) ──────────────────────────────────────────────
 
-export { chatCompletion, chatCompletionWithFallback, chatCompletionJson, chatCompletionText, tryParseJson };
+export {
+  chatCompletion,
+  chatCompletionWithFallback,
+  chatCompletionMultiFallback,
+  chatCompletionOpenRouter,
+  chatCompletionJson,
+  chatCompletionText,
+  tryParseJson,
+};
 
 /**
  * Legacy `ai` export — retained so existing imports don't break.

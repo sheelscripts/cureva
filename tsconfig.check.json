@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["apps/web/src/*"],
+      "@backend/*": ["backend/*"],
+      "@agents/*": ["agents/*"],
+      "@mcp/*": ["mcp/*"],
+      "@rag/*": ["rag/*"],
+      "@prompts/*": ["prompts/*"],
+      "@ml/*": ["ml/*"],
+      "@eval/*": ["eval/*"]
+    }
+  },
+  "include": [
+    "apps/web/src/**/*",
+    "agents/**/*.ts",
+    "backend/**/*.ts",
+    "mcp/**/*.ts",
+    "rag/**/*.ts",
+    "prompts/**/*.ts",
+    "ml/**/*.ts",
+    "eval/**/*.ts",
+    "packages/sdk/src/**/*.ts",
+    "packages/types/src/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "dist", "build", "vite-backup"]
+}

@@ -33,15 +33,15 @@ import {
   PlusCircle
 } from "lucide-react";
 
-import { 
-  currentDoctor, 
-  todayQueue, 
-  patientProfiles, 
-  drugDatabase, 
+import {
+  currentDoctor,
+  todayQueue,
+  patientProfiles,
+  drugDatabase,
   slotSaverMetrics,
-  QueueItem,
-  PatientProfile
-} from "@/mock/doctors";
+  getTodayQueue,
+} from "@cureva/sdk";
+import { QueueItem, PatientProfile } from "@/mock/doctors";
 
 import AgentOperationsBar from "@/features/admin/AgentOperationsBar";
 import SlotSaverWidget from "@/components/slotsaver/SlotSaverWidget";
@@ -78,7 +78,11 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
   };
 
   // Live Patient Queue State
-  const [queue, setQueue] = useState<QueueItem[]>(todayQueue);
+  const [queue, setQueue] = useState<QueueItem[]>(todayQueue as QueueItem[]);
+
+  useEffect(() => {
+    getTodayQueue().then((q) => setQueue(q as QueueItem[])).catch(() => {});
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
@@ -1481,6 +1485,19 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
         {/* Warning caution band */}
         <div className="bg-status-warning/5 border-b border-status-warning/20 px-4 py-1.5 text-center text-[10px] font-sans text-text-primary leading-snug shrink-0">
           ⚠️ Do not navigate away during active streaming. DPDP privacy filters keep transcription local.
+        </div>
+
+        {/* LIVE TRANSCRIPTION badge — visible indicator of real vs mock mode */}
+        <div className="px-4 py-1.5 bg-bg-base/50 border-b border-border-dim flex items-center gap-2">
+          <span className={`h-2 w-2 rounded-full shrink-0 ${isRecording ? 'bg-status-danger animate-pulse' : 'bg-text-tertiary'}`} />
+          <span className={`text-[10px] font-mono uppercase tracking-widest shrink-0 ${
+            isRecording ? 'text-status-danger font-bold' : 'text-text-tertiary'
+          }`}>
+            {isRecording ? 'LIVE TRANSCRIPTION — Real Audio Capture' : 'SIMULATION — Mock Script Mode'}
+          </span>
+          <span className="text-[9px] font-mono text-text-tertiary">
+            {isRecording ? '| ElevenLabs STT active' : '| Pre-baked script simulation'}
+          </span>
         </div>
 
         {/* Split columns — natural scroll on mobile, fixed-height split on lg */}

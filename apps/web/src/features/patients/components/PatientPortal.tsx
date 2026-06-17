@@ -35,8 +35,7 @@ import {
   appointments as initialAppointments, 
   prescriptions as initialPrescriptions, 
   labReports as initialLabReports, 
-  healthTimeline as initialTimeline,
-  triageChatHistory as initialTriageChat 
+  healthTimeline as initialTimeline
 } from "@/mock/patients";
 
 import { 
@@ -46,7 +45,8 @@ import {
   getLabReports, 
   getHealthTimeline, 
   bookAppointment, 
-  sendTriageMessage 
+  sendTriageMessage,
+  askAI 
 } from "@/mock/api";
 
 interface PatientPortalProps {
@@ -78,6 +78,11 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
   const [isAskTyping, setIsAskTyping] = useState(false);
   const askEndRef = useRef<HTMLDivElement>(null);
 
+  // Mode state: 'real' = live LLM, 'simulation' = mock response
+  const [mode, setMode] = useState<'real' | 'simulation'>('simulation');
+  // Shared mode for both tabs
+  const [sharedMode, setSharedMode] = useState<'real' | 'simulation'>('simulation');
+
   // Booking Flow States
   const [bookingStep, setBookingStep] = useState(1);
   const [selectedSpecialty, setSelectedSpecialty] = useState("");
@@ -96,7 +101,13 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
   // Notifications (Simulated warning banner / badge counts)
   const [unreadNotifications, setUnreadNotifications] = useState(1);
 
-  // --- MOCK API DATA INITIALIZATION ---
+  // Dynamic header — today's date + distance from current patient
+  const _now = new Date();
+  const dayName = _now.toLocaleDateString('en-US', { weekday: 'short' });
+  const monthDay = _now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const distanceKm = patient?.distanceKm ?? 2.1;
+
+  // --- MOCK + REAL API DATA INITIALIZATION ---
   useEffect(() => {
     // Populate base states
     setIsLoading(true);
@@ -120,6 +131,16 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
         timestamp: "10:31 AM"
       }
     ]);
+
+    // Phase A: fetch real data in background. Initial mock state prevents
+    // flicker; SDK functions silently fall back to mock on fetch failure.
+    Promise.allSettled([
+      getPatient().then(setPatient),
+      getAppointments().then(setAppointmentsList),
+      getPrescriptions().then(setPrescriptionsList),
+      getLabReports().then(setLabsList),
+      getHealthTimeline().then(setTimelineList),
+    ]).catch(() => {});
 
     return () => clearTimeout(timer);
   }, []);
@@ -190,8 +211,34 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
     setTriageInput("");
     setIsTriageTyping(true);
 
+    // Simulation mode: deterministic mock response
+    if (sharedMode === 'simulation') {
+      setIsTriageTyping(false);
+      const lower = msgText.toLowerCase();
+      if (lower.includes('chest') || lower.includes('heart') || lower.includes('breath')) {
+        streamAIResponse(
+          "These symptoms need immediate cardiological evaluation. [SIMULATION] Book Dr. Rajesh Sharma today at 4:30 PM — ₹1,500",
+          "triage",
+          [{ label: "Book 4:30 PM Today", slotId: "S-CARD-430", doctorName: "Dr. Rajesh Sharma", time: "4:30 PM", specialty: "Cardiology", cost: 1500 }]
+        );
+      } else if (lower.includes('skin') || lower.includes('rash') || lower.includes('itch')) {
+        streamAIResponse(
+          "Skin-related symptoms suggest dermatology. [SIMULATION] Book Dr. Priya Gupta today at 1:15 PM — ₹1,200",
+          "triage",
+          [{ label: "Book 1:15 PM Today", slotId: "S-DERM-115", doctorName: "Dr. Priya Gupta", time: "1:15 PM", specialty: "Dermatology", cost: 1200 }]
+        );
+      } else {
+        streamAIResponse(
+          "General consultation recommended. [SIMULATION] Book Dr. Ananya Gupta tomorrow at 9:00 AM — ₹800",
+          "triage",
+          [{ label: "Book 9:00 AM Tomorrow", slotId: "S-GEN-900", doctorName: "Dr. Ananya Gupta", time: "9:00 AM", specialty: "General Medicine", cost: 800 }]
+        );
+      }
+      return;
+    }
+
+    // Real mode: call live LLM via SDK
     try {
-      // Fetch delayed AI response from our mock API
       const response = await sendTriageMessage(msgText);
       streamAIResponse(response.content, "triage", response.actions);
     } catch {
@@ -207,9 +254,32 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
     setAskInput("");
     setIsAskTyping(true);
 
+    // Simulation mode: deterministic mock
+    if (sharedMode === 'simulation') {
+      setIsAskTyping(false);
+      streamAIResponse(
+        "[SIMULATION] Based on standard medical knowledge: this is a placeholder answer. Switch to Real Talk mode to ask the AI for an actual response.",
+        "ask"
+      );
+      return;
+    }
+
+    // Real mode: call askAI (Q&A, not triage/booking)
     try {
-      const response = await sendTriageMessage(msgText); // reuse response generator
-      streamAIResponse(response.content, "ask");
+      const result = await askAI(msgText);
+      streamAIResponse(result.answer, "ask");
+      // If the AI suggests booking, add a booking prompt after the message streams
+      if (result.suggestBooking) {
+        setAskMessages(prev => [
+          ...prev.slice(0, -1),
+          {
+            ...prev[prev.length - 1],
+            content: prev[prev.length - 1].content,
+            showBookingPrompt: true,
+            bookingReason: result.bookingReason,
+          },
+        ]);
+      }
     } catch {
       setIsAskTyping(false);
     }
@@ -296,7 +366,7 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
                   Good morning, <span className="font-serif italic text-text-secondary">{patient.name.split(' ')[0]}</span>
                 </h1>
                 <p className="text-[11px] text-text-secondary font-mono tracking-wide mt-1">
-                  Mon, Jan 15 · Air: Moderate · City Clinic (2.1 km)
+                  {dayName}, {monthDay} · Air: Moderate · City Clinic ({distanceKm} km)
                 </p>
               </div>
               <div>
@@ -315,6 +385,20 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
               {/* LEFT COLUMN: Triage Chat System */}
               <div className="lg:col-span-8 bg-bg-surface border border-border-dim rounded-sm flex flex-col h-[620px] overflow-hidden dynamic-chat-area">
                 
+                {/* MODE BADGE — Simulation = mock, Real = live LLM */}
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-bg-subtle border-b border-border-dim">
+                  <span className="h-2 w-2 rounded-full bg-status-safe animate-pulse shrink-0" />
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-text-secondary">
+                    {sharedMode === 'real' ? 'REAL TALK — Live LLM (Vercel AI Gateway)' : 'SIMULATION — Mock Response'}
+                  </span>
+                  <button
+                    onClick={() => setSharedMode(prev => prev === 'real' ? 'simulation' : 'real')}
+                    className="ml-auto text-[10px] font-mono uppercase tracking-widest text-text-primary hover:underline shrink-0"
+                  >
+                    Switch to {sharedMode === 'real' ? 'Simulation' : 'Real Talk'}
+                  </button>
+                </div>
+
                 {/* Chat header info bar */}
                 <div className="p-4 border-b border-border-dim bg-bg-subtle flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1548,6 +1632,20 @@ export default function PatientPortal({ currentSubView, onNavigateToView, resetT
                 Dataset Grounded (Jan 15)
               </span>
               <span className="text-[10px] text-right">DPDP Certified · CITY-DL-01</span>
+            </div>
+
+            {/* MODE BADGE — AI Assistant tab */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-bg-subtle border border-border-base rounded-sm">
+              <span className="h-2 w-2 rounded-full bg-status-warning animate-pulse shrink-0" />
+              <span className="text-[10px] font-mono uppercase tracking-widest text-text-secondary">
+                {sharedMode === 'real' ? 'REAL TALK — Live AI Q&A (Vercel AI Gateway)' : 'SIMULATION — Mock Q&A Response'}
+              </span>
+              <button
+                onClick={() => setSharedMode(prev => prev === 'real' ? 'simulation' : 'real')}
+                className="ml-auto text-[10px] font-mono uppercase tracking-widest text-text-primary hover:underline shrink-0"
+              >
+                Switch to {sharedMode === 'real' ? 'Simulation' : 'Real Talk'}
+              </button>
             </div>
 
             {/* Main layout: chat on top, sidebar below on mobile; side-by-side on lg */}

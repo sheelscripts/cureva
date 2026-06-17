@@ -48,6 +48,7 @@
  */
 
 const AI_GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /**
  * Primary model. The user requested meta/llama-3.2-90b. Note the
@@ -63,6 +64,29 @@ const DEFAULT_PRIMARY = 'meta/llama-3.2-90b';
  */
 const DEFAULT_FALLBACK = 'meta/llama-3.3-70b';
 
+/**
+ * Additional Vercel AI Gateway models to try when primary + fallback
+ * both return 429 or fail for other reasons. Listed in order of preference.
+ */
+const FALLBACK_MODELS = [
+  'anthropic/claude-3.5-haiku',
+  'openai/gpt-4o-mini',
+  'google/gemini-2.0-flash-exp',
+  'mistralai/mistral-small-3-24b-instruct',
+] as const;
+
+/** OpenRouter free model — first OpenRouter attempt. */
+const OPENROUTER_FREE_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
+
+/** OpenRouter cheap non-free model — absolute last resort when free tier is exhausted. */
+const OPENROUTER_CHEAP_MODEL = 'meta-llama/llama-3.1-8b-instruct';
+
+/** Number of retry attempts on 429 before giving up on a single model. */
+const RETRY_COUNT = 3;
+
+/** Base delay in ms before first retry on 429. Doubled each subsequent retry. */
+const RETRY_BASE_DELAY_MS = 2000;
+
 function pickPrimary(): string {
   return process.env.AI_GATEWAY_PRIMARY_MODEL || DEFAULT_PRIMARY;
 }
@@ -73,6 +97,10 @@ function pickFallback(): string {
 
 function pickApiKey(): string {
   return process.env.AI_GATEWAY_API_KEY || '';
+}
+
+function pickOpenRouterApiKey(): string {
+  return process.env.OPENROUTER_API_KEY || '';
 }
 
 // ─── types ─────────────────────────────────────────────────────────
@@ -148,6 +176,14 @@ function isRegionBlockError(status: number | undefined, body: string): boolean {
   );
 }
 
+/**
+ * Returns true when the response is a 429 rate-limit error.
+ */
+function isRateLimitError(status: number | undefined, body: string): boolean {
+  if (status === 429) return true;
+  return /rate.?limit|too.?many.?requests|quota.?exceeded/i.test(body);
+}
+
 async function postOnce(
   model: string,
   body: Omit<ChatCompletionRequest, 'model'>,
@@ -184,6 +220,7 @@ async function postOnce(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!res.ok) {
@@ -196,6 +233,10 @@ async function postOnce(
     // Mark region blocks so the fallback path can skip retrying the same model.
     if (isRegionBlockError(res.status, text)) {
       (err as any).regionBlocked = true;
+    }
+    // Mark rate limits for the retry wrapper.
+    if (isRateLimitError(res.status, text)) {
+      (err as any).rateLimited = true;
     }
     throw err;
   }
@@ -234,6 +275,159 @@ async function postOnce(
   };
 }
 
+/**
+ * POST with automatic retry-on-429 and exponential backoff.
+ * Retries up to RETRY_COUNT times with 2s, 4s, 8s delays.
+ * Region blocks and other errors are thrown immediately (no retry).
+ */
+async function postWithRetry(
+  model: string,
+  body: Omit<ChatCompletionRequest, 'model'>,
+  apiKey: string,
+  isRateLimited = false
+): Promise<ChatCompletionResult> {
+  let lastError: AiGatewayError | undefined;
+
+  for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
+    try {
+      return await postOnce(model, body, apiKey);
+    } catch (err) {
+      lastError = err as AiGatewayError;
+
+      // Immediate fail: region block — don't retry the same model.
+      if ((err as any).regionBlocked) throw err;
+
+      // Immediate fail: not a rate limit — don't retry.
+      if (!isRateLimited && !(err as any).rateLimited) throw err;
+
+      // Out of retries — give up on this model.
+      if (attempt >= RETRY_COUNT) break;
+
+      // Exponential backoff before next attempt.
+      const delayMs = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * OpenRouter POST for last-resort fallback.
+ * Tries the free model first, then falls back to a cheap non-free model
+ * (llama-3.1-8b-instruct, ~$0.07/M tokens on OpenRouter).
+ */
+async function postOpenRouter(
+  body: Omit<ChatCompletionRequest, 'model'>
+): Promise<ChatCompletionResult> {
+  const apiKey = pickOpenRouterApiKey();
+  if (!apiKey) {
+    throw new AiGatewayError('OPENROUTER_API_KEY not configured.');
+  }
+
+  const models = [OPENROUTER_FREE_MODEL, OPENROUTER_CHEAP_MODEL];
+  let lastError: AiGatewayError | undefined;
+
+  for (const model of models) {
+    try {
+      return await _postOpenRouterOnce(model, body, apiKey);
+    } catch (err) {
+      lastError = err as AiGatewayError;
+      // If rate-limited, try the next model.
+      if ((err as any).rateLimited || lastError.status === 429) {
+        continue;
+      }
+      // Other errors (auth, etc.) are fatal.
+      throw err;
+    }
+  }
+
+  throw lastError;
+}
+
+async function _postOpenRouterOnce(
+  model: string,
+  body: Omit<ChatCompletionRequest, 'model'>,
+  apiKey: string
+): Promise<ChatCompletionResult> {
+  const payload: Record<string, any> = {
+    model,
+    messages: body.messages,
+    temperature: body.temperature ?? 0.4,
+    max_tokens: body.maxTokens ?? 2048,
+    stream: false,
+  };
+
+  if (body.responseSchema) {
+    payload.response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: body.schemaName || 'cureva_response',
+        strict: false,
+        schema: body.responseSchema,
+      },
+    };
+  } else if (body.forceJsonMode) {
+    payload.response_format = { type: 'json_object' };
+  }
+
+  const res = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new AiGatewayError(
+      `OpenRouter ${res.status}: ${text.slice(0, 400) || res.statusText}`,
+      res.status,
+      model
+    );
+    if (res.status === 429) (err as any).rateLimited = true;
+    throw err;
+  }
+
+  const data = (await res.json()) as AiGatewayRawResponse;
+  if (data.error?.message) {
+    throw new AiGatewayError(
+      `OpenRouter error: ${data.error.message}`,
+      undefined,
+      model
+    );
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || content.length === 0) {
+    throw new AiGatewayError(
+      `OpenRouter returned empty content (finish_reason=${data.choices?.[0]?.finish_reason ?? 'unknown'})`,
+      undefined,
+      model
+    );
+  }
+
+  return {
+    text: content,
+    model: data.model ?? model,
+    usage: data.usage
+      ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens,
+        }
+      : undefined,
+    fromFallback: true,
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ─── public API ────────────────────────────────────────────────────
 
 /**
@@ -258,8 +452,21 @@ export async function chatCompletion(
  * secondary model on rate-limit, 5xx, region blocks, structured-output
  * errors, or when the primary's response isn't valid JSON (and a schema
  * was requested).
+ *
+ * Now walks an expanded chain: primary → fallback → FALLBACK_MODELS → OpenRouter.
  */
 export async function chatCompletionWithFallback(
+  req: ChatCompletionRequest
+): Promise<ChatCompletionResult> {
+  return chatCompletionMultiFallback(req);
+}
+
+/**
+ * Walk the full model chain: primary → fallback → FALLBACK_MODELS → OpenRouter.
+ * Each model gets retry-on-429 with exponential backoff.
+ * Returns the first successful response.
+ */
+export async function chatCompletionMultiFallback(
   req: ChatCompletionRequest
 ): Promise<ChatCompletionResult> {
   const apiKey = pickApiKey();
@@ -273,82 +480,93 @@ export async function chatCompletionWithFallback(
   const fallback = pickFallback();
   const schemaWanted = Boolean(req.responseSchema);
 
-  try {
-    const result = await postOnce(primary, req, apiKey);
+  // Build the full model chain: primary, fallback, then the rest of FALLBACK_MODELS.
+  const chain: string[] = [primary];
+  if (fallback !== primary) chain.push(fallback);
+  for (const m of FALLBACK_MODELS) {
+    if (m !== primary && m !== fallback) chain.push(m);
+  }
 
-    if (schemaWanted) {
-      // Verify the primary's response is actually JSON (some models emit
-      // prose wrapped in ``` fences even when response_format is set).
-      if (!tryParseJson(result.text)) {
-        throw new AiGatewayError(
-          'Primary model response is not valid JSON, retrying with fallback',
-          undefined,
-          primary,
-          result.text
-        );
+  let lastError: AiGatewayError | undefined;
+
+  for (const model of chain) {
+    try {
+      const result = await postWithRetry(model, req, apiKey, false);
+
+      if (schemaWanted) {
+        if (!tryParseJson(result.text)) {
+          // Non-JSON response on a schema request — try next model.
+          lastError = new AiGatewayError(
+            `Model ${model} returned non-JSON, trying next model`,
+            undefined,
+            model
+          );
+          continue;
+        }
       }
+      return result;
+    } catch (err) {
+      lastError = err as AiGatewayError;
+      // If region-blocked, skip immediately to next model (already thrown by postOnce).
+      // For rate limits that exhausted all retries, try next model.
+      if ((err as any).regionBlocked) {
+        continue;
+      }
+      // Other errors (5xx, auth, etc.) — try next model.
+      continue;
+    }
+  }
+
+  // All Vercel models exhausted — last resort: OpenRouter.
+  try {
+    const result = await postOpenRouter(req);
+
+    if (schemaWanted && !tryParseJson(result.text)) {
+      // Even OpenRouter didn't give us JSON — return what we have.
+      // The caller will see the raw text and can decide how to handle.
     }
     return result;
-  } catch (primaryErr) {
-    if (primary === fallback) throw primaryErr; // no point retrying same model
-
-    // Last-ditch: tell the fallback to respond as JSON via prompting since
-    // not every model supports json_schema mode.
-    const fallbackReq: ChatCompletionRequest = {
-      ...req,
-      model: fallback,
-    };
-
-    if (schemaWanted && !req.messages.some((m) => m.role === 'system')) {
-      fallbackReq.messages = [
-        {
-          role: 'system',
-          content:
-            'You must respond with valid JSON only. No prose, no markdown fences. ' +
-            'Output should be parseable by JSON.parse().',
-        },
-        ...req.messages,
-      ];
-    } else if (schemaWanted) {
-      // Prepend JSON-only reminder to the existing system message.
-      fallbackReq.messages = req.messages.map((m, i) =>
-        i === 0 && m.role === 'system'
-          ? {
-              ...m,
-              content:
-                m.content +
-                '\n\nIMPORTANT: Respond with valid JSON only — no markdown fences, no commentary.',
-            }
-          : m
-      );
-    }
-
-    const result = await postOnce(fallback, fallbackReq, apiKey);
-    return { ...result, fromFallback: true };
+  } catch (openRouterErr) {
+    // Combine both error messages for better diagnostics.
+    const orErr = openRouterErr as AiGatewayError;
+    const combinedMsg = lastError
+      ? `Vercel exhausted: ${lastError.message}; OpenRouter failed: ${orErr.message}`
+      : `All providers failed: ${orErr.message}`;
+    throw new AiGatewayError(combinedMsg, orErr.status, 'openrouter');
   }
 }
 
 /**
- * Strict structured-output helper. Retries once with a "respond with
- * JSON only" instruction if the response isn't parseable, then falls
- * back to the secondary model via chatCompletionWithFallback.
+ * Explicit OpenRouter call — exposed for callers who want to go directly
+ * to OpenRouter without waiting for Vercel to exhaust its chain.
+ */
+export async function chatCompletionOpenRouter(
+  req: ChatCompletionRequest
+): Promise<ChatCompletionResult> {
+  return postOpenRouter(req);
+}
+
+/**
+ * Strict structured-output helper. Uses the full model chain
+ * (primary → fallback → FALLBACK_MODELS → OpenRouter), each with
+ * retry-on-429. If JSON parsing fails, retries once with a nudge.
  */
 export async function chatCompletionJson<T = unknown>(
   req: ChatCompletionRequest
 ): Promise<{ data: T | null; result: ChatCompletionResult | null }> {
   const schemaWanted = Boolean(req.responseSchema);
 
-  // First attempt: structured output through fallback-aware wrapper.
+  // First attempt: structured output through the full multi-fallback chain.
   try {
-    const result = await chatCompletionWithFallback(req);
+    const result = await chatCompletionMultiFallback(req);
     const parsed = tryParseJson(result.text) as T | null;
     if (parsed != null) return { data: parsed, result };
-    // Primary/fallback both returned non-JSON — last try with explicit nudge.
+    // All models returned non-JSON — fall through to nudge retry.
   } catch {
     // fall through to retry
   }
 
-  // Retry once: tell the primary explicitly to return JSON only.
+  // Retry once: tell the model explicitly to return JSON only.
   try {
     const nudged: ChatCompletionRequest = {
       ...req,
@@ -375,7 +593,7 @@ export async function chatCompletionJson<T = unknown>(
       responseSchema: undefined, // drop strict schema so the nudge has full weight
       forceJsonMode: true,
     };
-    const result = await chatCompletion(nudged);
+    const result = await chatCompletionMultiFallback(nudged);
     const parsed = tryParseJson(result.text) as T | null;
     return { data: parsed, result };
   } catch {

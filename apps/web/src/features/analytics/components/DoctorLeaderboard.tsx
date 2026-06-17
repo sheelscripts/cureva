@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ArrowUpDown, 
@@ -14,12 +14,19 @@ import {
   FileText
 } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
-import { doctorMetrics } from "@/mock/admin";
+import { getDoctorMetrics } from "@cureva/sdk";
+import { doctorMetrics as initialDoctorMetrics } from "@/mock/admin";
 
 export default function DoctorLeaderboard() {
   const [sortField, setSortField] = useState<string>("utilizationRate");
   const [ascending, setAscending] = useState<boolean>(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
+  const [doctorMetricsData, setDoctorMetrics] = useState<typeof initialDoctorMetrics>(initialDoctorMetrics);
+
+  // Fetch doctor metrics asynchronously
+  useEffect(() => {
+    getDoctorMetrics().then(setDoctorMetrics).catch(() => setDoctorMetrics(initialDoctorMetrics));
+  }, []);
 
   // Sorting Handler
   const handleSort = (field: string) => {
@@ -32,7 +39,7 @@ export default function DoctorLeaderboard() {
   };
 
   const sortedDoctors = useMemo(() => {
-    return [...doctorMetrics].sort((a: any, b: any) => {
+    return [...doctorMetricsData].sort((a: any, b: any) => {
       let valA = a[sortField];
       let valB = b[sortField];
       if (typeof valA === "string") {
@@ -43,8 +50,8 @@ export default function DoctorLeaderboard() {
   }, [sortField, ascending]);
 
   const activeDoc = useMemo(() => {
-    return doctorMetrics.find(d => d.doctorId === selectedDoctorId) || null;
-  }, [selectedDoctorId]);
+    return doctorMetricsData.find(d => d.doctorId === selectedDoctorId) || null;
+  }, [selectedDoctorId, doctorMetricsData]);
 
   // Dynamic status color maps for Utilization rate
   const getUtilColor = (rate: number) => {

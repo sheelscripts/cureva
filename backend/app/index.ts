@@ -4,6 +4,7 @@
  */
 export * from './db/supabase';
 export * from './ai/vercel-gateway';
+export * from './ai/embeddings';
 export * from './ai/elevenlabs';
 // `./ai/gemini` re-exports the legacy `ai`, `generateStructuredOutput`,
 // and `transcribeAndTranslateAudio` symbols. We intentionally do NOT use

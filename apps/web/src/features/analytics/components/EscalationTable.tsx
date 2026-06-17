@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ShieldAlert, 
@@ -16,13 +16,14 @@ import {
   AlertCircle,
   FileCode
 } from "lucide-react";
-import { escalations } from "@/mock/admin";
+import { getEscalations } from "@cureva/sdk";
+import { escalations as initialEscalations } from "@/mock/admin";
 
 export default function EscalationTable() {
   const [filter, setFilter] = useState<string>("all");
   const [selectedEscalationId, setSelectedEscalationId] = useState<string | null>(null);
   const [resolutionInput, setResolutionInput] = useState<string>("");
-  const [unresolvedEscalations, setUnresolvedEscalations] = useState<typeof escalations>(escalations);
+  const [unresolvedEscalations, setUnresolvedEscalations] = useState<typeof initialEscalations>(initialEscalations);
   const [jsonCollapsed, setJsonCollapsed] = useState<boolean>(true);
   const [resolutionStatus, setResolutionStatus] = useState<string | null>(null);
 
@@ -36,6 +37,11 @@ export default function EscalationTable() {
     if (filter === "lost") return unresolvedEscalations.filter(e => e.outcome === "lost");
     return unresolvedEscalations;
   }, [filter, unresolvedEscalations]);
+
+  // Fetch escalations asynchronously
+  useEffect(() => {
+    getEscalations().then(setUnresolvedEscalations).catch(() => setUnresolvedEscalations(initialEscalations));
+  }, []);
 
   const handleResolve = (id: string) => {
     setUnresolvedEscalations((prev) => 

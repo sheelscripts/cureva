@@ -4,6 +4,8 @@ import React, { Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import NotificationBell from "@/components/notifications/NotificationBell";
+
 const AdminDashboard = dynamic(() => import("@/features/admin/AdminDashboard"), {
   ssr: false,
 });
@@ -14,12 +16,15 @@ function AdminDashboardContent() {
   const currentSubView = searchParams.get("view") || "admin-overview";
 
   return (
-    <AdminDashboard
-      currentSubView={currentSubView}
-      onNavigateToView={(view) => {
-        router.push(`/admin?view=${view}`);
-      }}
-    />
+    <>
+      <AdminDashboard
+        currentSubView={currentSubView}
+        onNavigateToView={(view) => {
+          router.push(`/admin?view=${view}`);
+        }}
+      />
+      <NotificationBell />
+    </>
   );
 }
 

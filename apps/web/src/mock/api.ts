@@ -5,7 +5,8 @@ import {
   getLabReports, 
   getHealthTimeline, 
   bookAppointment, 
-  sendTriageMessage 
+  sendTriageMessage,
+  askAI 
 } from "@cureva/sdk";
 
 export { 
@@ -15,5 +16,6 @@ export {
   getLabReports, 
   getHealthTimeline, 
   bookAppointment, 
-  sendTriageMessage 
+  sendTriageMessage,
+  askAI 
 };

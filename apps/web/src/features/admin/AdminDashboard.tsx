@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Building2, 
@@ -51,30 +51,49 @@ import RecoverySessionDrawer from "@/components/slotsaver/RecoverySessionDrawer"
 import EscalationCard from "@/components/slotsaver/EscalationCard";
 import SessionTimeline from "@/components/slotsaver/SessionTimeline";
 
-import { 
-  clinicOverview,
-  revenueMetrics,
-  slotSaverMetrics,
-  doctorMetrics,
-  agentMetrics,
-  promptMetrics,
-  escalations
+import {
+  revenueMetrics as initialRevenueMetrics,
+  slotSaverMetrics as initialSlotSaverMetrics,
+  doctorMetrics as initialDoctorMetrics,
+  agentMetrics as initialAgentMetrics
 } from "@/mock/admin";
+import {
+  getRevenueMetrics,
+  getSlotSaverMetricsAdmin,
+  getDoctorMetrics,
+  getAgentMetrics
+} from "@cureva/sdk";
 
 interface AdminDashboardProps {
   currentSubView?: string;
   onNavigateToView?: (view: string) => void;
 }
 
-export default function AdminDashboard({ 
-  currentSubView = "admin-overview", 
-  onNavigateToView = () => {} 
+export default function AdminDashboard({
+  currentSubView = "admin-overview",
+  onNavigateToView = () => {}
 }: AdminDashboardProps) {
-  
+
   // Date and filter selections
   const [dateRange, setDateRange] = useState<"today" | "week" | "month">("month");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+
+  // Live admin data — initial state from mock (no-flicker), refreshed from API on mount.
+  const [revenueMetrics, setRevenueMetrics] = useState(initialRevenueMetrics);
+  const [slotSaverMetrics, setSlotSaverMetrics] = useState(initialSlotSaverMetrics);
+  const [doctorMetrics, setDoctorMetrics] = useState(initialDoctorMetrics);
+  const [agentMetrics, setAgentMetrics] = useState(initialAgentMetrics);
+
+  useEffect(() => {
+    // Silent fetch — SDK falls back to mock on failure.
+    Promise.allSettled([
+      getRevenueMetrics().then(setRevenueMetrics),
+      getSlotSaverMetricsAdmin().then(setSlotSaverMetrics),
+      getDoctorMetrics().then(setDoctorMetrics),
+      getAgentMetrics().then(setAgentMetrics),
+    ]).catch(() => {});
+  }, []);
 
   // Live SlotSaver state
   const { 
