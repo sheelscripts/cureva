@@ -291,8 +291,10 @@ async function runSeed() {
         slotsList.push(slotData);
 
         // Randomly book slots for appointments (~35% fill rate)
+        // Skip Priya Mehta (P-1042) — her appointments are seeded explicitly above.
         if (Math.random() < 0.35 && appointmentsList.length < 500) {
-          const patient = getRandomElement(patientsList);
+          const eligiblePatients = patientsList.filter((p: any) => p.id !== 'P-1042');
+          const patient = getRandomElement(eligiblePatients);
           const isPast = slotTime < new Date();
           const status = isPast 
             ? getRandomElement(['completed', 'cancelled', 'no_show'])
