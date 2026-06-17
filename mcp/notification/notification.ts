@@ -1,5 +1,5 @@
 /**
- * Notification MCP — free-tier delivery for the CureV demo.
+ * Notification MCP — free-tier delivery for the Cureva demo.
  *
  * We deliberately do NOT integrate Twilio, Meta WhatsApp Cloud API, or any
  * paid SMS/voice provider. The plan is documented in chat.md: "looks real

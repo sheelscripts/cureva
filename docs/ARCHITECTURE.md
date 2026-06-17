@@ -1,8 +1,8 @@
-# CureV — System Architecture Documentation
+# Cureva — System Architecture Documentation
 
 ## Overview
 
-CureV is an AI-powered clinical operations platform for Indian outpatient clinics. It uses a **LangGraph multi-agent system** running on a **Next.js monorepo** deployed on Vercel, with Supabase as the database, **Vercel AI Gateway** (`meta/llama-3.2-90b` primary + `meta/llama-3.3-70b` fallback) as the LLM, **ElevenLabs** for voice STT/TTS, and **OpenRouter text-embedding-3-small** for RAG embeddings (Vercel rate-limits all embedding models on the free tier).
+Cureva is an AI-powered clinical operations platform for Indian outpatient clinics. It uses a **LangGraph multi-agent system** running on a **Next.js monorepo** deployed on Vercel, with Supabase as the database, **Vercel AI Gateway** (`meta/llama-3.2-90b` primary + `meta/llama-3.3-70b` fallback) as the LLM, **ElevenLabs** for voice STT/TTS, and **OpenRouter text-embedding-3-small** for RAG embeddings (Vercel rate-limits all embedding models on the free tier).
 
 ---
 

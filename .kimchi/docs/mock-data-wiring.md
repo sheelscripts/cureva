@@ -1,4 +1,4 @@
-# CureV — Mock Data Wiring Reference
+# Cureva — Mock Data Wiring Reference
 
 > Generated after Phase A/B/C implementation. This document explains how
 > the mock data layer is connected to the real backend, so you can flip

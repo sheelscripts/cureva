@@ -1,7 +1,7 @@
-# CureV — Kimchi Session Handoff
+# Cureva — Kimchi Session Handoff
 
 > Comprehensive handoff document for the Kimchi session that audited, fixed,
-> extended, and partially wired the CureV monorepo. Read this top-to-bottom
+> extended, and partially wired the Cureva monorepo. Read this top-to-bottom
 > if you're picking the project up cold.
 
 ---
@@ -71,7 +71,7 @@ Original audit is in `implementation_plan.md`. The 9 fixes:
 - **`backend/app/ai/embeddings.ts` + `gemini.ts`** — Gemini is now fully gone from runtime code (only historical mentions remain in doc-comments).
 - **`apps/web/src/app/api/voice-call/turn/route.ts`** — single-turn voice endpoint. audio → ElevenLabs STT → OpenRouter LLM → ElevenLabs TTS → audio. After 3 user turns, prompts the LLM to emit a JSON `{specialty, urgency, reasoning}` block which the UI renders as a recommendation card. Graceful fallbacks everywhere (text-only input if mic blocked, browser speechSynthesis if TTS unavailable).
 - **`apps/web/src/lib/hooks/useVoiceCall.ts`** — getUserMedia + MediaRecorder + base64 + audio playback + browser-TTS fallback. Caps history, manages all the booleans, parses recommendation JSON.
-- **`apps/web/src/components/voice/VoiceCall.tsx`** — drop-in widget. Tailwind only, matches CureV warm-cream / clinical-teal palette.
+- **`apps/web/src/components/voice/VoiceCall.tsx`** — drop-in widget. Tailwind only, matches Cureva warm-cream / clinical-teal palette.
 - **`prompts/voice/META_PROMPT.md`** — meta-prompt to regenerate per-component voice agents on demand.
 - **`prompts/voice/AGENTS.md`** — seven complete, drop-in-ready ElevenLabs Conversational AI configs:
   1. `triage` (Dr. Aria) — symptom → specialty + urgency

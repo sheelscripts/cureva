@@ -1,4 +1,4 @@
-# CureV — Agent Playbooks
+# Cureva — Agent Playbooks
 
 Reference for how each LangGraph agent is triggered, what it does, and what state it produces.
 

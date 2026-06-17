@@ -1,7 +1,7 @@
 /**
  * verify-connection.ts
  *
- * End-to-end wiring check for CureV. Run with:
+ * End-to-end wiring check for Cureva. Run with:
  *
  *   npx tsx backend/scripts/verify-connection.ts
  *
@@ -380,7 +380,7 @@ async function checkElevenLabs(): Promise<boolean> {
 async function checkOpenRouterEmbeddings(): Promise<boolean> {
   const start = Date.now();
   try {
-    const vector = await embedWithOpenRouter('CureV connection test.');
+    const vector = await embedWithOpenRouter('Cureva connection test.');
     const ms = Date.now() - start;
     if (vector.length !== 768) {
       record(
@@ -455,8 +455,8 @@ async function checkNotificationsModule(): Promise<boolean> {
   // the same encoding rules.
   const fakePhone = '+91 98765-43210';
   const waDigits = fakePhone.replace(/[^\d]/g, '');
-  const deepLink = `https://wa.me/${waDigits}?text=${encodeURIComponent('Hello from CureV')}`;
-  const expected = `https://wa.me/919876543210?text=Hello%20from%20CureV`;
+  const deepLink = `https://wa.me/${waDigits}?text=${encodeURIComponent('Hello from Cureva')}`;
+  const expected = `https://wa.me/919876543210?text=Hello%20from%20Cureva`;
 
   if (deepLink !== expected) {
     record('WhatsApp deep-link formatter', 'fail', `Got ${deepLink}, expected ${expected}`);
@@ -490,7 +490,7 @@ function checkOptionalServices() {
 // ─── main ──────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(colorize('\nCureV — Connection Verification', 'cyan'));
+  console.log(colorize('\nCureva — Connection Verification', 'cyan'));
   console.log(colorize('────────────────────────────────', 'dim'));
 
   const envOk = await section('Environment', () => checkEnvPresent()).then((r) => r);
@@ -561,7 +561,7 @@ function printSummary() {
       colorize('\n  Critical checks passed. Warnings above are optional.', 'yellow')
     );
   } else {
-    console.log(colorize('\n  All checks passed. CureV is wired up correctly.', 'green'));
+    console.log(colorize('\n  All checks passed. Cureva is wired up correctly.', 'green'));
   }
 }
 

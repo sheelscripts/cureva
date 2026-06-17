@@ -1,4 +1,4 @@
-# CureV — Developer Setup Guide
+# Cureva — Developer Setup Guide
 
 ## Prerequisites
 

@@ -1,7 +1,7 @@
 /**
  * Vercel AI Gateway client.
  *
- * Single source of truth for LLM chat calls across CureV. Routes every
+ * Single source of truth for LLM chat calls across Cureva. Routes every
  * generateStructuredOutput / chat call through Vercel AI Gateway
  * (https://ai-gateway.vercel.sh), so the agents and MCP tools don't
  * care which underlying provider actually answers — Vercel handles

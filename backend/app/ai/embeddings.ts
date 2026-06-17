@@ -11,7 +11,7 @@
  *   • 768-dimensional output (matches the existing match_documents RPC
  *     which uses vector(768)).
  *   • Free tier unavailable — text-embedding-3-small costs ~$0.02 / 1M
- *     tokens on OpenRouter. For a CureV demo this is well under a cent
+ *     tokens on OpenRouter. For a Cureva demo this is well under a cent
  *     per session, but monitor usage at https://openrouter.ai/activity.
  *
  * Override via env:
@@ -67,7 +67,7 @@ export async function embedWithOpenRouter(text: string, model?: string): Promise
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://cureva.health',
-        'X-Title': 'CureV',
+        'X-Title': 'Cureva',
       },
       body: JSON.stringify({
         model: useModel,
@@ -133,7 +133,7 @@ export async function embedBatch(texts: string[], model?: string): Promise<numbe
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://cureva.health',
-        'X-Title': 'CureV',
+        'X-Title': 'Cureva',
       },
       body: JSON.stringify({ model: useModel, input: chunk, dimensions: dims }),
     });

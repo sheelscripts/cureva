@@ -3,7 +3,7 @@
  * for new code. This file is kept as a thin shim so legacy imports
  * `from '@backend/app/ai/gemini'` keep working.
  *
- * All CureV AI calls now route through OpenRouter (LLM + embeddings) and
+ * All Cureva AI calls now route through OpenRouter (LLM + embeddings) and
  * ElevenLabs (STT + TTS). No Google Gemini keys are required.
  *
  * Provider split:
