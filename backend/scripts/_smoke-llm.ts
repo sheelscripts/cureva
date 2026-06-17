@@ -3,7 +3,7 @@
 import { config as loadEnv } from 'dotenv';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { chatCompletionWithFallback, chatCompletionJson } from '../app/ai/openrouter';
+import { chatCompletionWithFallback, chatCompletionJson } from '../app/ai/vercel-gateway';
 
 const repoRoot = resolve(__dirname, '..', '..');
 for (const p of [join(repoRoot, '.env.local'), join(repoRoot, 'apps', 'web', '.env.local')]) {

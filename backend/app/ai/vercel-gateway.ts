@@ -1,38 +1,78 @@
 /**
- * OpenRouter client.
+ * Vercel AI Gateway client.
  *
- * Single source of truth for LLM calls across CureV. Routes every
- * generateStructuredOutput / chat call through OpenRouter so the
- * agents and MCP tools don't care which provider actually answers.
+ * Single source of truth for LLM chat calls across CureV. Routes every
+ * generateStructuredOutput / chat call through Vercel AI Gateway
+ * (https://ai-gateway.vercel.sh), so the agents and MCP tools don't
+ * care which underlying provider actually answers — Vercel handles
+ * the routing, retries, and provider failover.
  *
  * Model strategy (see apps/web/.env.local):
- *   • OPENROUTER_PRIMARY_MODEL    — strong, free. Default: Hermes 3 405B.
- *   • OPENROUTER_FALLBACK_MODEL   — secondary free model used when
- *                                   the primary fails (rate-limit,
- *                                   5xx, invalid JSON, structured-
- *                                   output unsupported, …).
+ *   • AI_GATEWAY_PRIMARY_MODEL    — your preferred model. Default
+ *                                   below is meta/llama-3.2-90b.
+ *   • AI_GATEWAY_FALLBACK_MODEL   — used when the primary fails.
  *
- * Why OpenRouter: one API key, dozens of free models, OpenAI-compatible
- * schema, no SDK lock-in.
+ * Why Vercel AI Gateway:
+ *   • One API key (vck_…) covers OpenAI, Anthropic, Meta, Mistral,
+ *     Google, Alibaba Qwen, and more.
+ *   • OpenAI-compatible schema, no SDK lock-in.
+ *   • Built-in routing + failover across providers.
  *
- * Docs: https://openrouter.ai/docs
+ * ⚠️ Region note for Meta Llama models
+ * -------------------------------------
+ * Meta's EULA restricts Llama distribution in some regions. When
+ * the gateway tries to route `meta/llama-3.2-90b` through AWS
+ * Bedrock from a restricted region, you get a 400:
+ *   "Access to Meta Llama models is not allowed from unsupported
+ *    countries, regions, or territories."
+ * Verified working Llama models on Vercel AI Gateway from India:
+ *   - meta/llama-3.1-70b          ✅
+ *   - meta/llama-3.3-70b          ✅
+ *   - anthropic/claude-3.5-haiku  ✅
+ *   - openai/gpt-4o-mini          ✅
+ * Verified BLOCKED:
+ *   - meta/llama-3.2-90b          ❌ (region)
+ *   - meta/llama-4-maverick       ❌ (likely region too — same EULA)
+ *
+ * The fallback chain transparently handles this: if the primary
+ * returns a 400/region error, we retry the fallback.
+ *
+ * Embeddings note
+ * ---------------
+ * All Vercel AI Gateway embedding models are rate-limited on the
+ * free tier. We keep embeddings on OpenRouter
+ * (openai/text-embedding-3-small, ~$0.02/1M tokens) — see
+ * backend/app/ai/embeddings.ts.
+ *
+ * Docs: https://vercel.com/docs/ai-gateway
  */
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const AI_GATEWAY_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 
-const DEFAULT_PRIMARY = 'nousresearch/hermes-3-llama-3.1-405b:free';
-const DEFAULT_FALLBACK = 'meta-llama/llama-3.3-70b-instruct:free';
+/**
+ * Primary model. The user requested meta/llama-3.2-90b. Note the
+ * region caveat above — this will fall through to the fallback in
+ * restricted regions.
+ */
+const DEFAULT_PRIMARY = 'meta/llama-3.2-90b';
+
+/**
+ * Fallback model. meta/llama-3.3-70b is the closest available model
+ * that works reliably from India and other Meta-restricted regions
+ * (it routes through providers other than Bedrock).
+ */
+const DEFAULT_FALLBACK = 'meta/llama-3.3-70b';
 
 function pickPrimary(): string {
-  return process.env.OPENROUTER_PRIMARY_MODEL || DEFAULT_PRIMARY;
+  return process.env.AI_GATEWAY_PRIMARY_MODEL || DEFAULT_PRIMARY;
 }
 
 function pickFallback(): string {
-  return process.env.OPENROUTER_FALLBACK_MODEL || DEFAULT_FALLBACK;
+  return process.env.AI_GATEWAY_FALLBACK_MODEL || DEFAULT_FALLBACK;
 }
 
 function pickApiKey(): string {
-  return process.env.OPENROUTER_API_KEY || '';
+  return process.env.AI_GATEWAY_API_KEY || '';
 }
 
 // ─── types ─────────────────────────────────────────────────────────
@@ -46,7 +86,7 @@ export interface ChatMessage {
 
 export interface ChatCompletionRequest {
   messages: ChatMessage[];
-  /** If provided, OpenRouter's `response_format` is set to `json_schema`. */
+  /** If provided, the response_format is set to `json_schema`. */
   responseSchema?: Record<string, any>;
   /** Schema name (for json_schema mode). */
   schemaName?: string;
@@ -70,7 +110,7 @@ export interface ChatCompletionResult {
   fromFallback: boolean;
 }
 
-export class OpenRouterError extends Error {
+export class AiGatewayError extends Error {
   constructor(
     message: string,
     public readonly status?: number,
@@ -78,13 +118,13 @@ export class OpenRouterError extends Error {
     public readonly raw?: unknown
   ) {
     super(message);
-    this.name = 'OpenRouterError';
+    this.name = 'AiGatewayError';
   }
 }
 
 // ─── low-level POST ────────────────────────────────────────────────
 
-interface OpenRouterRawResponse {
+interface AiGatewayRawResponse {
   choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   model?: string;
   usage?: {
@@ -93,6 +133,19 @@ interface OpenRouterRawResponse {
     total_tokens?: number;
   };
   error?: { message?: string; code?: number };
+}
+
+/**
+ * Returns true when the response is a region-restriction error
+ * (Meta EULA blocking, etc.) that should trigger an immediate
+ * fallback to a different model rather than retrying the same one.
+ */
+function isRegionBlockError(status: number | undefined, body: string): boolean {
+  if (!body) return false;
+  return (
+    /unsupported countries|regions, or territories/i.test(body) ||
+    /not allowed from/i.test(body)
+  );
 }
 
 async function postOnce(
@@ -124,30 +177,33 @@ async function postOnce(
     payload.response_format = { type: 'json_object' };
   }
 
-  const res = await fetch(OPENROUTER_URL, {
+  const res = await fetch(AI_GATEWAY_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://cureva.health',
-      'X-Title': 'CureV',
     },
     body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new OpenRouterError(
-      `OpenRouter ${res.status}: ${text.slice(0, 400) || res.statusText}`,
+    const err = new AiGatewayError(
+      `Vercel AI Gateway ${res.status}: ${text.slice(0, 400) || res.statusText}`,
       res.status,
       model
     );
+    // Mark region blocks so the fallback path can skip retrying the same model.
+    if (isRegionBlockError(res.status, text)) {
+      (err as any).regionBlocked = true;
+    }
+    throw err;
   }
 
-  const data = (await res.json()) as OpenRouterRawResponse;
+  const data = (await res.json()) as AiGatewayRawResponse;
   if (data.error?.message) {
-    throw new OpenRouterError(
-      `OpenRouter error: ${data.error.message}`,
+    throw new AiGatewayError(
+      `Vercel AI Gateway error: ${data.error.message}`,
       data.error.code,
       model
     );
@@ -155,8 +211,8 @@ async function postOnce(
 
   const content = data.choices?.[0]?.message?.content;
   if (typeof content !== 'string' || content.length === 0) {
-    throw new OpenRouterError(
-      `OpenRouter returned empty content (finish_reason=${
+    throw new AiGatewayError(
+      `Vercel AI Gateway returned empty content (finish_reason=${
         data.choices?.[0]?.finish_reason ?? 'unknown'
       })`,
       undefined,
@@ -189,8 +245,8 @@ export async function chatCompletion(
 ): Promise<ChatCompletionResult> {
   const apiKey = pickApiKey();
   if (!apiKey) {
-    throw new OpenRouterError(
-      'OPENROUTER_API_KEY not configured. Add it to apps/web/.env.local.'
+    throw new AiGatewayError(
+      'AI_GATEWAY_API_KEY not configured. Add it to apps/web/.env.local.'
     );
   }
   const model = req.model || pickPrimary();
@@ -199,16 +255,17 @@ export async function chatCompletion(
 
 /**
  * Resilient chat completion: tries the primary model, falls back to the
- * secondary free model on rate-limit, 5xx, structured-output errors, or
- * when the primary's response isn't valid JSON (and a schema was requested).
+ * secondary model on rate-limit, 5xx, region blocks, structured-output
+ * errors, or when the primary's response isn't valid JSON (and a schema
+ * was requested).
  */
 export async function chatCompletionWithFallback(
   req: ChatCompletionRequest
 ): Promise<ChatCompletionResult> {
   const apiKey = pickApiKey();
   if (!apiKey) {
-    throw new OpenRouterError(
-      'OPENROUTER_API_KEY not configured. Add it to apps/web/.env.local.'
+    throw new AiGatewayError(
+      'AI_GATEWAY_API_KEY not configured. Add it to apps/web/.env.local.'
     );
   }
 
@@ -220,10 +277,10 @@ export async function chatCompletionWithFallback(
     const result = await postOnce(primary, req, apiKey);
 
     if (schemaWanted) {
-      // Verify the primary's response is actually JSON (some free models
-      // ignore response_format and emit prose wrapped in ``` fences).
+      // Verify the primary's response is actually JSON (some models emit
+      // prose wrapped in ``` fences even when response_format is set).
       if (!tryParseJson(result.text)) {
-        throw new OpenRouterError(
+        throw new AiGatewayError(
           'Primary model response is not valid JSON, retrying with fallback',
           undefined,
           primary,
@@ -236,10 +293,9 @@ export async function chatCompletionWithFallback(
     if (primary === fallback) throw primaryErr; // no point retrying same model
 
     // Last-ditch: tell the fallback to respond as JSON via prompting since
-    // many free models (Llama 3.3, Mistral, …) ignore json_schema mode.
+    // not every model supports json_schema mode.
     const fallbackReq: ChatCompletionRequest = {
       ...req,
-      // Keep schema for fallback; if it doesn't work the caller will fail.
       model: fallback,
     };
 
@@ -375,3 +431,21 @@ export async function chatCompletionText(
   const r = await chatCompletionWithFallback(req);
   return r.text.trim();
 }
+
+// ─── legacy aliases ────────────────────────────────────────────────
+
+/**
+ * @deprecated Use `chatCompletionWithFallback` or `AiGatewayError`.
+ *   These names exist so old imports keep working during the
+ *   openrouter → vercel-gateway rename.
+ */
+export const chatCompletionWithFallbackOpenRouter = chatCompletionWithFallback;
+/**
+ * @deprecated Use `chatCompletionJson`.
+ */
+export const chatCompletionJsonOpenRouter = chatCompletionJson;
+
+/**
+ * @deprecated Use `AiGatewayError`.
+ */
+export class OpenRouterError extends AiGatewayError {}

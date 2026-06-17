@@ -2,7 +2,7 @@
 
 ## Overview
 
-CureV is an AI-powered clinical operations platform for Indian outpatient clinics. It uses a **LangGraph multi-agent system** running on a **Next.js monorepo** deployed on Vercel, with Supabase as the database, **OpenRouter** (Hermes 3 405B primary + free fallback) as the LLM, **ElevenLabs** for voice STT/TTS, and **OpenRouter text-embedding-3-small** for RAG embeddings.
+CureV is an AI-powered clinical operations platform for Indian outpatient clinics. It uses a **LangGraph multi-agent system** running on a **Next.js monorepo** deployed on Vercel, with Supabase as the database, **Vercel AI Gateway** (`meta/llama-3.2-90b` primary + `meta/llama-3.3-70b` fallback) as the LLM, **ElevenLabs** for voice STT/TTS, and **OpenRouter text-embedding-3-small** for RAG embeddings (Vercel rate-limits all embedding models on the free tier).
 
 ---
 
@@ -123,7 +123,7 @@ Each domain in `backend/app/domains/` provides typed controller functions that t
 - **Next.js API routes** in `apps/web/src/app/api/` — deployed as serverless functions
 - **Workspace packages** compiled via `transpilePackages` in `next.config.ts`
 - **Cron jobs** use Vercel Cron (`vercel.json`) calling `/api/slotsaver/cron`
-- **Environment Variables** required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`. Optional: `ELEVENLABS_API_KEY`, `RESEND_API_KEY`.
+- **Environment Variables** required: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`, `OPENROUTER_API_KEY` (for embeddings). Optional: `ELEVENLABS_API_KEY`, `RESEND_API_KEY`.
 
 ---
 

@@ -24,7 +24,7 @@ import {
   chatCompletionJson,
   chatCompletionText,
   tryParseJson,
-} from './openrouter';
+} from './vercel-gateway';
 import { transcribeAndTranslateAudio as transcribeWithElevenLabs } from './elevenlabs';
 import { embedWithOpenRouter } from './embeddings';
 

@@ -39,6 +39,7 @@ import {
 } from '@cureva/backend';
 import {
   chatCompletionWithFallback,
+  AiGatewayError,
   OpenRouterError,
   type ChatMessage,
 } from '@cureva/backend';
@@ -181,7 +182,7 @@ export async function POST(req: NextRequest) {
           error: 'LLM call failed',
           detail: err.message,
           remediation:
-            'Check OPENROUTER_API_KEY in apps/web/.env.local and confirm the model IDs are still free on https://openrouter.ai/models.',
+            'Check AI_GATEWAY_API_KEY in apps/web/.env.local and confirm the model IDs are valid at https://vercel.com/docs/ai-gateway/models.',
         },
         { status: 502 }
       );

@@ -26,8 +26,9 @@ import { resolve, join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import {
   chatCompletionWithFallback,
+  AiGatewayError,
   OpenRouterError,
-} from '../app/ai/openrouter';
+} from '../app/ai/vercel-gateway';
 import { embedWithOpenRouter, EmbeddingError } from '../app/ai/embeddings';
 
 // ─── env loading ───────────────────────────────────────────────────
@@ -289,10 +290,14 @@ async function checkTablesAndSchema(): Promise<boolean> {
   return true;
 }
 
-async function checkOpenRouter(): Promise<boolean> {
-  const key = process.env.OPENROUTER_API_KEY;
+async function checkAiGateway(): Promise<boolean> {
+  const key = process.env.AI_GATEWAY_API_KEY;
   if (!key) {
-    record('OpenRouter API', 'fail', 'OPENROUTER_API_KEY missing in apps/web/.env.local');
+    record(
+      'Vercel AI Gateway',
+      'fail',
+      'AI_GATEWAY_API_KEY missing in apps/web/.env.local'
+    );
     return false;
   }
 
@@ -310,7 +315,7 @@ async function checkOpenRouter(): Promise<boolean> {
 
     if (!/ok/i.test(result.text)) {
       record(
-        'OpenRouter API',
+        'Vercel AI Gateway',
         'warn',
         `Unexpected reply from ${result.model}: "${result.text.trim().slice(0, 80)}"`,
         ms
@@ -319,17 +324,17 @@ async function checkOpenRouter(): Promise<boolean> {
     }
 
     record(
-      'OpenRouter API',
+      'Vercel AI Gateway',
       'pass',
       `${result.model} replied: "${result.text.trim()}"${result.fromFallback ? ' (via fallback)' : ''}`,
       ms
     );
     return true;
   } catch (err: any) {
-    if (err instanceof OpenRouterError) {
-      record('OpenRouter API', 'fail', `${err.message}`, undefined);
+    if (err instanceof AiGatewayError) {
+      record('Vercel AI Gateway', 'fail', `${err.message}`, undefined);
     } else {
-      record('OpenRouter API', 'fail', err?.message ?? String(err));
+      record('Vercel AI Gateway', 'fail', err?.message ?? String(err));
     }
     return false;
   }
@@ -501,7 +506,7 @@ async function main() {
   });
 
   await section('AI providers', async () => {
-    await checkOpenRouter();
+    await checkAiGateway();
     await checkOpenRouterEmbeddings();
     await checkElevenLabs();
   });

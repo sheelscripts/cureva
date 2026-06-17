@@ -16,7 +16,7 @@
  *   • TTS: https://elevenlabs.io/docs/api-reference/text-to-speech
  */
 
-import { chatCompletionText } from './openrouter';
+import { chatCompletionText } from './vercel-gateway';
 
 // ─── config ────────────────────────────────────────────────────────
 
