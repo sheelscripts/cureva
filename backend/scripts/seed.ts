@@ -181,7 +181,7 @@ async function runSeed() {
       user_id: priyaUser.id,
       name: 'Priya Mehta',
       phone: '+91 98765 43210',
-      dob: '1991-06-17',
+      dob: '1992-06-17',
       gender: 'female',
       blood_group: 'B+',
       address: '42, Green Park Extension',
@@ -352,11 +352,19 @@ async function runSeed() {
       .limit(1)
       .single();
 
-    // Find a Dermatology slot for next week
+    // Find a Dermatology slot for next week — pin to an explicit Dermatology doctor
+    // (Dr. Priya Gupta) so the slot join never falls back to a non-derm doctor.
+    const { data: dermDoctor } = await supabase.from('doctors')
+      .select('id, name, specialty, consultation_fee_inr')
+      .eq('specialty', 'Dermatology')
+      .eq('name', 'Dr. Priya Gupta')
+      .limit(1)
+      .single();
+
     const { data: dermSlot } = await supabase.from('slots')
       .select('*, doctors(name, specialty, consultation_fee_inr)')
       .eq('status', 'available')
-      .eq('doctors.specialty', 'Dermatology')
+      .eq('doctor_id', dermDoctor?.id ?? '')
       .limit(1)
       .single();
 
