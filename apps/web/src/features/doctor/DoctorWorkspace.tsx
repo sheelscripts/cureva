@@ -43,6 +43,10 @@ import {
 } from "@cureva/sdk";
 import { QueueItem, PatientProfile } from "@/mock/doctors";
 
+// Cast patientProfiles to a permissive Record<string, any> so `patientProfilesRecord[selectedPatientId]`
+// works when selectedPatientId is a generic string (TS7053 fix for Vercel build).
+const patientProfilesRecord = patientProfiles as unknown as Record<string, PatientProfile>;
+
 import AgentOperationsBar from "@/features/admin/AgentOperationsBar";
 import SlotSaverWidget from "@/components/slotsaver/SlotSaverWidget";
 
@@ -316,7 +320,7 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
 
   // Drug-Allergy & Drug-Drug checking rules
   const interactionWarnings = useMemo(() => {
-    const currentPatient = selectedPatientId ? patientProfiles[selectedPatientId] : null;
+    const currentPatient = selectedPatientId ? patientProfilesRecord[selectedPatientId] : null;
     const warnings: string[] = [];
 
     if (!currentPatient) return warnings;
@@ -407,7 +411,7 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
     setTimeout(() => {
       setIsSendingPdf(false);
       setShowShareModal(false);
-      const activePatient = selectedPatientId ? patientProfiles[selectedPatientId] : patientProfiles["P-1042"];
+      const activePatient = selectedPatientId ? patientProfilesRecord[selectedPatientId] : patientProfilesRecord["P-1042"];
       showToast(`Rx PDF dispatched perfectly to ${activePatient?.name} via ${shareChannel.toUpperCase()}!`);
     }, 1500);
   };
@@ -1055,7 +1059,7 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
   // ==========================================
   function renderPatientDetailPage() {
     const patientId = selectedPatientId || "P-1042"; // Fallback to Priya
-    const profile = patientProfiles[patientId];
+    const profile = patientProfilesRecord[patientId];
 
     if (!profile) {
       return (
@@ -1416,7 +1420,7 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
   // PAGE 5: AI SCRIBE — LIVE APPOINTMENT
   // ==========================================
   function renderLiveScribeScreen() {
-    const activePatient = selectedPatientId ? patientProfiles[selectedPatientId] : patientProfiles["P-1042"];
+    const activePatient = selectedPatientId ? patientProfilesRecord[selectedPatientId] : patientProfilesRecord["P-1042"];
 
     return (
       <div className="flex-1 flex flex-col overflow-y-auto bg-bg-base select-text">
@@ -1699,7 +1703,7 @@ export default function DoctorWorkspace({ currentSubView, resetTrigger }: Doctor
   // PAGE 6: PRESCRIPTION WRITER SCREEN
   // ==========================================
   function renderPrescriptionWriterScreen() {
-    const activePatient = selectedPatientId ? patientProfiles[selectedPatientId] : patientProfiles["P-1042"];
+    const activePatient = selectedPatientId ? patientProfilesRecord[selectedPatientId] : patientProfilesRecord["P-1042"];
 
     return (
       <div className="flex-1 overflow-y-auto flex flex-col bg-bg-base select-text">

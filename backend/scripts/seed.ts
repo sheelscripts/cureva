@@ -638,7 +638,7 @@ async function runSeed() {
         ragSuccess = true;
       }
     } catch (ragErr) {
-      console.warn('RAG ingest failed (likely OpenRouter quota):', ragErr.message);
+      console.warn('RAG ingest failed (likely OpenRouter quota):', (ragErr as any)?.message);
     }
   }
 
