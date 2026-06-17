@@ -2,5 +2,5 @@
   "name": "Clinical Platform",
   "description": "Cureva — A premium clinical platform for Indian hospitals featuring Patient Triage, AI Scribe, and SlotSaver revenue recovery dashboards.",
   "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_LLM_API", "MAJOR_CAPABILITY_VOICE_SYNTHESIS", "MAJOR_CAPABILITY_SPEECH_TO_TEXT"]
 }

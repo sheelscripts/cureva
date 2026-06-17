@@ -167,7 +167,7 @@ export async function predictorNode(state: AgentState): Promise<any> {
 
     const isHighRisk = prediction.score >= 0.45;
     
-    // Call Gemini to generate factor explanation text using prompts package template
+    // Call the LLM to generate factor explanation text using prompts package template
     let explanation = 'No significant risk factors flagged.';
     if (isHighRisk) {
       const explainerPrompt = prompts.predictorExplainerPromptTemplate(
@@ -328,7 +328,7 @@ export async function recoveryNode(state: AgentState): Promise<any> {
     // 2. Perform outreach to top ranked candidate
     const entry = scoredWaitlist[0];
     
-    // Call Gemini to generate waitlist message template
+    // Call the LLM to generate the waitlist message template
     const outreachPrompt = prompts.recoveryOutreachPromptTemplate(
       entry.patient_name,
       entry.wait_days,
@@ -513,7 +513,7 @@ export async function scribeNode(state: AgentState): Promise<any> {
       ai_alerts: []
     };
 
-    // 2. Call Gemini to extract SOAPDelta updates matching the schema
+    // 2. Call the LLM to extract SOAPDelta updates matching the schema
     const scribePrompt = prompts.scribePromptTemplate(JSON.stringify(currentSoap), chunkTranscript);
     const delta = await generateStructuredOutput<SOAPDelta>(
       scribePrompt,
@@ -810,7 +810,7 @@ export async function auditNode(state: AgentState): Promise<any> {
   try {
     const traceSummary = JSON.stringify(state.agent_trace);
 
-    // Call Gemini to score the session audit evaluation
+    // Call the LLM to score the session audit evaluation
     const scoreSchema = {
       type: 'OBJECT',
       properties: {

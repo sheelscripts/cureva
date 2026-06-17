@@ -10,10 +10,11 @@
  *
  *   1. Supabase connectivity + table presence
  *   2. Schema drift detection (the columns fixed in this round)
- *   3. Gemini API live call
- *   4. RAG `match_documents` RPC
- *   5. MCP notification module (deep-link generation)
- *   6. Resend API key presence (warn-only)
+ *   3. OpenRouter API live call (chat + embeddings)
+ *   4. ElevenLabs API key validation
+ *   5. RAG `match_documents` RPC
+ *   6. MCP notification module (deep-link generation)
+ *   7. Resend API key presence (warn-only)
  *
  * Exits 0 when every critical check passes, 1 otherwise. Individual
  * warnings never fail the run — they're advisory.
@@ -27,6 +28,7 @@ import {
   chatCompletionWithFallback,
   OpenRouterError,
 } from '../app/ai/openrouter';
+import { embedWithOpenRouter, EmbeddingError } from '../app/ai/embeddings';
 
 // ─── env loading ───────────────────────────────────────────────────
 
@@ -126,7 +128,7 @@ async function checkEnvPresent(): Promise<boolean> {
     'OPENROUTER_API_KEY',
   ];
   // Optional: RAG vector search degrades if missing.
-  const optional = ['GEMINI_API_KEY', 'ELEVENLABS_API_KEY', 'RESEND_API_KEY'];
+  const optional = ['ELEVENLABS_API_KEY', 'RESEND_API_KEY'];
 
   const missingCritical = critical.filter(
     (k) => !process.env[k] || process.env[k]!.startsWith('your_')
@@ -147,9 +149,7 @@ async function checkEnvPresent(): Promise<boolean> {
     record(
       `Optional: ${k}`,
       'warn',
-      `Not set. ${k === 'GEMINI_API_KEY'
-        ? 'RAG vector search disabled; keyword search still works.'
-        : k === 'ELEVENLABS_API_KEY'
+      `Not set. ${k === 'ELEVENLABS_API_KEY'
         ? 'Scribe STT and voice-call TTS will fall back gracefully.'
         : 'Email notifications disabled; WhatsApp/SMS deep links still work.'}`
     );
@@ -372,21 +372,42 @@ async function checkElevenLabs(): Promise<boolean> {
   }
 }
 
-async function checkGeminiEmbeddings(): Promise<boolean> {
-  // Embeddings are the only thing still on Gemini. The RAG retriever
-  // wraps this in try/catch, so failure here is a soft warning rather
-  // than a critical failure.
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) {
+async function checkOpenRouterEmbeddings(): Promise<boolean> {
+  const start = Date.now();
+  try {
+    const vector = await embedWithOpenRouter('CureV connection test.');
+    const ms = Date.now() - start;
+    if (vector.length !== 768) {
+      record(
+        'OpenRouter embeddings (RAG)',
+        'warn',
+        `Expected 768 dims, got ${vector.length}. Set OPENROUTER_EMBED_DIMS=768 or migrate the schema.`,
+        ms
+      );
+      return false;
+    }
     record(
-      'Gemini embeddings (RAG)',
-      'warn',
-      'GEMINI_API_KEY not set. RAG vector search will be disabled; keyword search still works.'
+      'OpenRouter embeddings (RAG)',
+      'pass',
+      `768-dim vector received (first 6 values: ${vector.slice(0, 6).map((v) => v.toFixed(4)).join(', ')}…)`,
+      ms
     );
+    return true;
+  } catch (err) {
+    if (err instanceof EmbeddingError) {
+      // Treat rate-limit / 4xx as warn (RAG degrades gracefully), 5xx as fail.
+      const isRateLimit = err.message.includes('429');
+      record(
+        'OpenRouter embeddings (RAG)',
+        isRateLimit ? 'warn' : 'fail',
+        err.message,
+        undefined
+      );
+      return !isRateLimit;
+    }
+    record('OpenRouter embeddings (RAG)', 'fail', (err as any)?.message ?? String(err));
     return false;
   }
-  record('Gemini embeddings (RAG)', 'pass', 'Key present (RAG retriever will attempt vector search on demand).');
-  return true;
 }
 
 async function checkRagRpc(): Promise<boolean> {
@@ -481,8 +502,8 @@ async function main() {
 
   await section('AI providers', async () => {
     await checkOpenRouter();
+    await checkOpenRouterEmbeddings();
     await checkElevenLabs();
-    await checkGeminiEmbeddings();
   });
 
   await section('RAG', async () => {

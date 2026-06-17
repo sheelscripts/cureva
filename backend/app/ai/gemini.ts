@@ -3,21 +3,18 @@
  * for new code. This file is kept as a thin shim so legacy imports
  * `from '@backend/app/ai/gemini'` keep working.
  *
+ * All CureV AI calls now route through OpenRouter (LLM + embeddings) and
+ * ElevenLabs (STT + TTS). No Google Gemini keys are required.
+ *
  * Provider split:
  *   • Chat (generateContent, generateStructuredOutput) → OpenRouter
  *     (Hermes 3 405B primary + free fallback).
+ *   • Embeddings (embedContent) → OpenRouter text-embedding-3-small.
  *   • Audio transcription (transcribeAndTranslateAudio) → ElevenLabs STT.
- *   • Embeddings (embedContent) → Google text-embedding-004.
- *     OpenRouter doesn't expose a free embeddings model, so the RAG
- *     retriever keeps using Gemini for embeddings. If GEMINI_API_KEY
- *     is unset or out of credits, `embedContent` throws and the RAG
- *     retriever's try/catch returns an empty result set — the rest of
- *     CureV (triage, scribe, voice call) keeps working.
- *   • Audio synthesis (TTS) for the voice-call agent → ElevenLabs
- *     (see backend/app/ai/elevenlabs.ts).
+ *   • Audio synthesis (TTS) for the voice-call agent → ElevenLabs.
  *
  * See:
- *   - backend/app/ai/openrouter.ts   (LLM)
+ *   - backend/app/ai/openrouter.ts   (LLM + embeddings)
  *   - backend/app/ai/elevenlabs.ts   (STT / TTS)
  */
 
@@ -29,7 +26,7 @@ import {
   tryParseJson,
 } from './openrouter';
 import { transcribeAndTranslateAudio as transcribeWithElevenLabs } from './elevenlabs';
-import { embedWithGemini } from './embeddings';
+import { embedWithOpenRouter } from './embeddings';
 
 // ─── re-exports (LLM) ──────────────────────────────────────────────
 
@@ -39,18 +36,14 @@ export { chatCompletion, chatCompletionWithFallback, chatCompletionJson, chatCom
  * Legacy `ai` export — retained so existing imports don't break.
  * Two methods are exposed, mirroring the old `@google/genai` shape:
  *   • `generateContent` → OpenRouter chat (Hermes 3 405B → fallback).
- *   • `embedContent`   → Google text-embedding-004 (no fallback).
+ *   • `embedContent`   → OpenRouter text-embedding-3-small (768-dim).
  */
 export const ai = {
   models: {
     generateContent: async (args: any) => {
+      const messages = normaliseGeminiContentsToMessages(args.contents);
       const result = await chatCompletion({
-        messages: [
-          ...(args.config?.systemInstruction
-            ? [{ role: 'system' as const, content: String(args.config.systemInstruction) }]
-            : []),
-          { role: 'user' as const, content: String(args.contents) },
-        ],
+        messages,
         temperature: args.config?.temperature,
         maxTokens: args.config?.maxOutputTokens,
         forceJsonMode: args.config?.responseMimeType === 'application/json',
@@ -61,7 +54,7 @@ export const ai = {
 
     embedContent: async (args: { model?: string; contents: string | string[] }) => {
       const texts = Array.isArray(args.contents) ? args.contents : [args.contents];
-      const vectors = await Promise.all(texts.map((t) => embedWithGemini(t, args.model)));
+      const vectors = await Promise.all(texts.map((t) => embedWithOpenRouter(t, args.model)));
       // Shape matches @google/genai's response.
       return {
         embeddings: vectors.map((values) => ({ values })),
@@ -69,6 +62,63 @@ export const ai = {
     },
   },
 };
+
+/**
+ * Convert the various `@google/genai` `contents` shapes that legacy code
+ * uses into the flat OpenAI-style message array expected by chatCompletion.
+ *
+ * Supported shapes:
+ *   - string                                     → [{ role: 'user', content }]
+ *   - { text: '...' }                            → [{ role: 'user', content }]
+ *   - { role, parts: [{ text }] }                → [{ role, content: joined }]
+ *   - [{ role, parts: [{ text }] }, ...]         → flat message list
+ *   - { inlineData: {...}, text: '...' }         → text wins (audio handled separately)
+ */
+function normaliseGeminiContentsToMessages(contents: any): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
+  if (typeof contents === 'string') {
+    return [{ role: 'user', content: contents }];
+  }
+  if (contents == null) {
+    return [{ role: 'user', content: '' }];
+  }
+  if (!Array.isArray(contents)) {
+    contents = [contents];
+  }
+  const out: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+  for (const part of contents) {
+    if (part == null) continue;
+    if (typeof part === 'string') {
+      out.push({ role: 'user', content: part });
+      continue;
+    }
+    // { role, parts } — Gemini turn shape
+    if (typeof part === 'object' && Array.isArray(part.parts)) {
+      const role: 'system' | 'user' | 'assistant' =
+        part.role === 'model' || part.role === 'assistant'
+          ? 'assistant'
+          : part.role === 'system'
+          ? 'system'
+          : 'user';
+      const text = part.parts
+        .map((p: any) => (typeof p === 'string' ? p : p?.text ?? ''))
+        .filter(Boolean)
+        .join('\n');
+      if (text) out.push({ role, content: text });
+      continue;
+    }
+    // { text } — bare Gemini text part
+    if (typeof part === 'object' && typeof part.text === 'string') {
+      out.push({ role: 'user', content: part.text });
+      continue;
+    }
+    // { inlineData } — image/audio bytes. Out of scope for text models;
+    // skip silently rather than stringify an object.
+    if (typeof part === 'object' && part.inlineData) {
+      continue;
+    }
+  }
+  return out.length > 0 ? out : [{ role: 'user', content: '' }];
+}
 
 // ─── legacy compat: generateStructuredOutput ────────────────────────
 
